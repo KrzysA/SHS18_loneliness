@@ -1,0 +1,788 @@
+---
+title: "The Prevalence of Loneliness Among Adults: a Case Study of Scotland using Scottish Household Survey (2018)"
+author: "Krzysztof Adamczyk"
+output: 
+  html_document:
+    toc: true
+    toc_depth: 5
+    theme: spacelab
+    code_download: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+### 1. Introduction
+
+This report aims to provide an overview of the prevalence of loneliness in Scotland, taking into account its relationship with a variety of key demographic and individual measures, household and geographical factors, and neighbourhood perceptions.
+
+Loneliness is most often defined as ‘a subjective state based on a person’s emotional perception of the number and/or quality of social connections they need compared to what is currently being experienced.’^[Fakoya, O.A., McCorry, N.K. & Donnelly, M. Loneliness and social isolation interventions for older adults: a scoping review of reviews. BMC Public Health 20, 129 (2020).] Feelings of loneliness are not just caused by physical isolation and lack of companionship, but also through a lack of useful role in society. While often only considered a major issue in older adults, or not being featured prominently in public policy at all, loneliness has come to the fore of public policy agenda in Scotland in recent years.^[This is evidenced in the 2018 report A Connected Scotland: our strategy for tackling social isolation and loneliness and building stronger social connections which made this research possible (https://www.gov.scot/publications/connected-scotland-strategy-tackling-social-isolation-loneliness-building-stronger-social-connections/).]
+
+A rich evidence base already exists on the detrimental effects of loneliness to individuals, communities and the society, but until recently no survey data enabled a systematic analysis of the risk factors of loneliness and its prevalence in the Scottish population. This analysis has been made possible with the 2018 wave of Scottish Household Survey (SHS) addition of questions on loneliness and social isolation, with opportunities for future trend analysis as new waves are released. At this stage it is worth noting that this analysis is largely exploratory with no formal statistical models employed. As loneliness remains a somewhat elusive phenomenon that is not entirely understood, its relationship with the factors included in this study lacks robust theory of causality. The study of prevalence is therefore more appropriate and meaningful with the aim of looking at how loneliness is conditioned on these different factors rather than trying to disentangle all their influences at once using complex statistical models. 
+
+What follows is a analysis of the prevalence of loneliness in Scotland as reported in SHS 2018 wave which pays particular attention to age, one of the very few factors known to have a non-linear relationship with loneliness.^[Victor, C. R. and Yang, K. (2012) ‘The prevalence of loneliness among adults: A case study of the United Kingdom’, Journal of Psychology: Interdisciplinary and Applied, 146(1–2), pp. 85–104. doi: 10.1080/00223980.2011.613875.] 
+
+### 2. Methodological note
+
+This report looks at the relationship between loneliness and 19 variables, 13 of which can be considered vulnerability / protective factors and six are statements about perceptions of respondents' immediate neighbourhood. While all variables are categorical, two of these variables are nominal the remaining 17 are ordinal - such as income or number of household occupants - which enables deployment of more sophisticated measures of association beyond the chi square statistic. Gamma correlation is a measure of ordinal association between two ranked numerical variables producing a value between -1 and 1 to denote the strength and direction of relationship, accompanied by p-value, similarly Pearson's r.^[Goodman, Leo A. and Kruskal, William H. (1954). "Measures of Association for Cross Classifications". Journal of the American Statistical Association 49 (268): 732-764.]
+
+All tables, bars and plots are made using weighted data from SHS 2018 wave. All unused levels are dropped and levels with very few responses such as "don't know" and "refused" are also dropped to ensure that statistical estimates are accurate.
+
+The question on loneliness was phrased: "How much of the time during the past week have you felt lonely?" and offered four answers:  
+
+"None or almost none of the time",  
+"Some of the time",  
+"Most of the time",  
+"All or almost all of the time",  
+"Don't know",  
+
+The bottom two have been combined into "All or most of the time" and "Don't know" category has been dropped leaving the variable with three levels:  
+
+"None or almost none of the time",  
+"Some of the time",  
+"All or most of the time".  
+
+
+
+```{r message=FALSE, warning=FALSE, include=FALSE}
+
+# Loading libraries and the dataset; filter by complete random interview.
+
+library(foreign)
+library(tidyverse)
+library(survey)
+library(sjPlot)
+library(wesanderson)          
+library(ggiraph)
+library(MESS)                 
+library(questionr)            
+library(cowplot)              
+library(scales)
+library(gtsummary)
+library(gt)
+
+SHS18 <- read.spss("C:\\Users\\Krzys\\Desktop\\SHS18\\UKDA-8617-spss\\spss\\spss25\\shs2018_social_public.sav", to.data.frame = TRUE)
+
+SHS18 <- SHS18 %>%
+  filter(rand_ok == "Complete random interview")
+
+```
+
+```{r message=FALSE, warning=FALSE, include=FALSE}
+
+# Dropping unused, low count, "don't know" and "refused" levels in variables; aggregating and relabeling.
+
+SHS18$hhsize <- as.factor(SHS18$hhsize)
+
+SHS18 <- SHS18 %>%
+  mutate(hhsize = case_when(
+                    SHS18$hhsize == "1" ~ "1",
+                    SHS18$hhsize == "2" ~ "2",
+                    SHS18$hhsize == "3" ~ "3-4",
+                    SHS18$hhsize == "4" ~ "3-4",
+                    SHS18$hhsize == "5" ~ "5+",
+                    SHS18$hhsize == "6" ~ "5+"))
+
+levels(SHS18$randage)[levels(SHS18$randage)=='86+'] <- "86"
+SHS18$randage <- as.numeric(as.character(SHS18$randage))
+SHS18$agebins <- cut(SHS18$randage, 
+                     c(15, 29, 59, Inf),
+                     labels=c("16-29","30-59","60+"),
+                     include.lowest = TRUE)
+
+SHS18$agebinswide <- cut(SHS18$randage, 
+                     c(15, 24, 34, 44, 54, 64, Inf),
+                     labels=c("16-24","25-34", "35-44", "45-54", "55-64", "65+"),
+                     include.lowest = TRUE)
+
+SHS18$randgender <- droplevels(SHS18$randgender)
+SHS18$voluntee <- droplevels(SHS18$voluntee)
+
+levels(SHS18$RANDETH2012)[levels(SHS18$RANDETH2012)=='Refused'] <- NA
+levels(SHS18$RANDETH2012)[levels(SHS18$RANDETH2012)=="Don't know"] <- NA
+SHS18$RANDETH2012 <- droplevels(SHS18$RANDETH2012)
+
+levels(SHS18$randecon)[levels(SHS18$randecon)=='Refused'] <- NA
+levels(SHS18$randecon)[levels(SHS18$randecon)=="Don't know"] <- NA
+levels(SHS18$randecon)[levels(SHS18$randecon)=="Pre school/Not yet at school"] <- NA
+levels(SHS18$randecon)[levels(SHS18$randecon)=="Other, please say what (specify)"] <- NA
+levels(SHS18$randecon)[levels(SHS18$randecon)=="Government work or training scheme"] <- NA
+SHS18$randecon <- droplevels(SHS18$randecon)
+
+levels(SHS18$genhlth)[levels(SHS18$genhlth)=="Don't know"] <- NA
+SHS18$genhlth <- droplevels(SHS18$genhlth)
+
+SHS18 <- SHS18 %>%
+  mutate(disability = case_when(
+                    SHS18$rg5a == "No" ~ "None",
+                    SHS18$rg5b == "Yes, a lot" ~ "Yes",
+                    SHS18$rg5b == "Yes, a little" ~ "Yes",
+                    SHS18$rg5b == "Not at all" ~ "None"))
+
+levels(SHS18$disability)[levels(SHS18$disability)=='Refusal'] <- NA
+levels(SHS18$disability)[levels(SHS18$disability)=="Don't know"] <- NA
+
+levels(SHS18$social3_01)[levels(SHS18$social3_01)=="Don't know"] <- NA
+levels(SHS18$social3_02)[levels(SHS18$social3_02)=="Don't know"] <- NA
+levels(SHS18$social3_03)[levels(SHS18$social3_03)=="Don't know"] <- NA
+levels(SHS18$social3_04)[levels(SHS18$social3_04)=="Don't know"] <- NA
+levels(SHS18$social3_05)[levels(SHS18$social3_05)=="Don't know"] <- NA
+levels(SHS18$social3_06)[levels(SHS18$social3_06)=="Don't know"] <- NA
+
+
+levels(SHS18$RANDRELG) <- list("None" = "A - None",
+                               "Church of Scotland" = "B - Church of Scotland",
+                               "Roman Catholic" = "C - Roman Catholic",
+                               "Other Christian"  = "D - Other Christian",   
+                               "Another religion" =  "E - Another religion")
+
+levels(SHS18$RANDSTAT2012) <- list(
+  "Never married" = "Never married and never registered a same-sex civil partnership",
+  "Married" = "Married / In a registered same-sex civil partnership",
+  "Separated" = "Separated, but still legally married / in a same-sex civil partnership",
+  "Divorced" = "Divorced / Formely in a same-sex civil parntership now legally dissolved",
+  "Widowed" = "Widowed / Surviving partner from a same-sex civil partnership")
+
+levels(SHS18$hedqual8) <- list(
+                         "No qualifications" = "No qualifications",
+                         "Standard grad or equiv." = "Level 1 - 'O' Grade, Standard grade or equiv (SVQ level 1 or 2).",
+                         "Highers or equiv." = "Level 2 - Higher, A level or equivalent (SVQ Level 3)",
+                         "HNC/HND or equiv." = "Level 3 - HNC/HND or equivalent (SVQ Level 4)", 
+                         "Degree or equiv." = "Level 4 - Degree, Professional qualification (Above SVQ Level 4)")
+
+levels(SHS18$social1) <- list("Every day or most days"="Every day or most days",
+                        "A few times a week"="A few times a week",
+                        "Once a week"="Once a week", 
+                        "A few times a month"="A few times a month",
+                        "Once a month"="Once a month",
+                        "A few times a year"="A few times a year",
+                        "Very rarely"="Very rarely",
+                        "Never"="Never")
+
+levels(SHS18$social2) <- list("None or almost none of the time"="None or almost none of the time", 
+                              "Some of the time"="Some of the time", 
+                              "All or most of the time"="Most of the time", 
+                              "All or most of the time"="All or almost all of the time")
+
+levels(SHS18$MD16QUIN) <- list("20% most deprived"="1 - 20% most deprived", 
+                               "2"="2",                      
+                               "3"="3",                      
+                               "4"="4",       
+                               "20% least deprived"="5 - 20% least deprived")
+
+```
+
+```{r message=FALSE, warning=FALSE, include=FALSE}
+
+# Renaming variables and attaching the dataset.
+
+SHS18 <- SHS18 %>% 
+  dplyr::rename(
+    lonely = social2,          # How much of the time during the past week have you felt lonely?
+    age = randage,             # Age
+    agebins = agebins,         # Age in bins 16-39, 40-59, 60+
+    agebinswide = agebinswide, # Age in bins 16-24, 25-34, 35-44, 45-54, 55-64, 65+
+    
+    partner = RANDSTAT2012,    # Marital status
+    religion = RANDRELG,       # Religion
+    
+    ethnicity = RANDETH2012,   # Ethnicity
+    genderr = randgender,      # Gender
+    disability = disability,   # Disability
+    health = genhlth,          # Health status
+    qualifications = hedqual8, # Highest educational qualification
+    isolated = social1,        # How often, if at all, do you meet socially?
+    outdoor = outdoor,         # Participation in any outdoor activity in the last 12 months
+
+    simd = MD16QUIN,           # SIMD Quantiles
+    urbanrural = SHS_2CLA,     # Urban or rural household
+    householdsize = hhsize,    # No. of people in the household incl. babies
+    householdincome = tothinc, # Total household income
+)
+attach(SHS18)
+```
+
+```{r message=FALSE, warning=FALSE, include=FALSE}
+
+# Creating weight designs 
+
+indweights <- svydesign(ids = ~ 1, data = SHS18, weights = SHS18$IND_WT)
+indweightsALL <- subset(indweights, agebins %in% c("16-29", "30-59", "60+"))
+indweights16to29 <- subset(indweights, agebins == "16-29")
+indweights30to59 <- subset(indweights, agebins == "30-59")
+indweights60plus <- subset(indweights, agebins == "60+")
+
+```
+
+```{r message=FALSE, warning=FALSE, include=FALSE}
+
+# Function1 (html_bargraph) for stacked bar graphs of weighted proportional data of loneliness and any other variable (formulae is to be written  using ~ and + signs, xlab is label for x variable, xangle is angle of x label and xjust its position). For long labels use xangle = 45 and xjust = 1. This function requires ggplot2 and wesanderson packages.
+
+html_bargraph <- function(formulae, xlab = "", design, xangle = 0, xjust = 0.5, show.legend = FALSE) {
+  
+crs <- prop.table(svytable(formulae, design = design), 2) %>%
+                          as.data.frame() %>%
+                          mutate(prop = round(Freq, 4),
+                                 Freq = NULL)
+crs$prop[crs$prop == 1] <- 0
+
+names(crs)[1] <- "x"
+names(crs)[2] <- "y"
+
+bg <- ggplot(crs, aes(fill = x, x = y, y = prop, tooltip = percent(prop, 0.01))) + 
+             geom_bar_interactive(position="fill", stat="identity", show.legend = show.legend) + 
+             scale_fill_manual(values = wes_palette("Zissou1", 3, type = "continuous")) +
+             labs(x = xlab, y = "", fill = "Frequency of loneliness in past week") + 
+             theme(axis.text.x = element_text(angle = xangle, hjust = xjust), plot.title = element_text(size=10)) +
+             scale_y_continuous(labels = scales::percent_format())
+return(bg)
+}
+
+```
+
+```{r message=FALSE, warning=FALSE, include=FALSE}
+
+# Function2 (allup) for calculating n size of age subgroups with weighting designs.
+
+allup <- function(formulae, design) {
+alln <- svytable(formulae, design = design) %>%
+                          as.data.frame()
+alln <- round(sum(alln$Freq), 0)
+}
+```
+
+```{r message=FALSE, include=FALSE}
+
+# Function3 (hmtl_4bargraphs) for creating four bar graphs by age group and weighting design of loneliness and any given variable. Depends on allup function for calculation of subsamples n, and html_bargraph for base ggplot plotting of stacked percentage bargraphs. For long labels use xangle = 45 and xjust = 1. This function requires ggplot2, ggiraph, cowplot and wesanderson packages. 
+
+html_4bargraphs <- function(formulae, xlab = "", title = "", vartitle = "", xangle = 0, xjust = 0.5 ) {
+
+p0 <- html_bargraph(formulae, design = indweightsALL, show.legend = TRUE)
+p1 <- html_bargraph(formulae, design = indweightsALL, xangle = xangle, xjust = xjust, xlab = xlab)
+p2 <- html_bargraph(formulae, design = indweights16to29, xangle = xangle, xjust = xjust, xlab = xlab)
+p3 <- html_bargraph(formulae, design = indweights30to59, xangle = xangle, xjust = xjust, xlab = xlab)
+p4 <- html_bargraph(formulae, design = indweights60plus, xangle = xangle, xjust = xjust, xlab = xlab)
+
+p1 <- p1 + ggtitle(paste0("All age groups (n = ", allup(formulae, indweightsALL), ")"))
+p2 <- p2 + ggtitle(paste0("Aged 16-29 (n = ", allup(formulae, indweights16to29), ")"))
+p3 <- p3 + ggtitle(paste0("Aged 30-59 (n = ", allup(formulae, indweights30to59), ")"))
+p4 <- p4 + ggtitle(paste0("Aged 60+ (n = ", allup(formulae, indweights60plus), ")"))
+
+legend_p <- get_legend(p0 + guides(color = guide_legend(nrow = 1)) +
+                            theme(legend.position = "bottom", legend.box.margin = margin(0, 0, 0, 12)))
+        
+plottitle <- ggdraw() + draw_label(title, fontface = 'bold', size = 10, x = 0, hjust = 0) +
+                        draw_label(vartitle, size = 8, x = 0, hjust = 0, vjust = 2.4) + 
+                        theme(plot.margin = margin(0, 0, 0, 7))
+                    
+plot1234 <- plot_grid(p1, p2, p3, p4, ncol = 2)
+
+fourplots <- girafe(ggobj = plot_grid(plottitle, plot1234, legend_p, ncol = 1, rel_heights = c(0.1, 1)),
+       width_svg = 8, height_svg = 8)
+
+girafe_options(x = fourplots, opts_zoom(min = .5, max = 4))
+}
+```
+
+```{r message=FALSE, warning=FALSE, include=FALSE}
+
+# Function4 (gamma) for gamma correlation test with associated statistical significance. For input value 0 it produces empty space.
+
+library(MESS)
+library(survey)
+
+gamma <- function(formulae, design) {
+  
+if (formulae == 0) {
+  return("")
+} else {  
+  
+gm <- gkgamma(svytable(formulae, design = design))
+
+asterix <- function(sig) {
+if(sig <= 0.001) {invisible("***")}
+else if (sig <= 0.01) {invisible("**")}
+else if (sig <= 0.05) {invisible("*")}
+else {invisible("")}
+}
+
+g <- paste0(format(round(gm$estimate, 2),nsmall = 2), asterix((gm$p.value)))
+
+return(g)
+  }
+}
+
+```
+
+```{r warning=FALSE, include=FALSE}
+
+# Function5 (chis) for gamma correlation test with associated statistical significance. For input value 0 it produces empty space.
+
+chis <- function(formulae, design) {
+  
+if (formulae == 0) {
+  return("")
+} else {  
+  
+chi <- chisq.test(svytable(formulae, design = design))
+
+pvalueofchisqr <- function(sig) {
+if(sig <= 0.001) {invisible("< 0.001")}
+else if (sig <= 0.01) {invisible("< 0.01")}
+else if (sig <= 0.05) {invisible("< 0.05")}
+else {invisible("> 0.05")}
+}
+
+c <- paste0("p of chi-square ", pvalueofchisqr(chi$p.value))
+
+return(c)
+  }
+}
+```
+
+
+### 3. Prevalence of loneliness by age
+
+Age has been chosen as the main group variable as it is know to have a U-shaped relationship with loneliness.^[Victor, C. R. and Yang, K. (2012) ‘The prevalence of loneliness among adults: A case study of the United Kingdom’, Journal of Psychology: Interdisciplinary and Applied, 146(1–2), pp. 85–104. doi: 10.1080/00223980.2011.613875.] The reported levels of loneliness tend to be higher in younger age groups, decrease in mid age, to rise up again in older age, and it is broadly theorized that such association is due to stages of the lifecourse.
+
+Figure 1. presents distribution of loneliness in five age groups which is consisted with the literature and has a resemblance of the U-shaped relationship.
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, out.width = "40%"}
+
+test <- prop.table(svytable(~ lonely + agebinswide, design = indweights), 2)
+
+testALL <- test %>%
+  as.data.frame() %>%
+  mutate(prop = round(Freq, 4),
+                Freq = NULL) %>%
+  subset(lonely == "Some of the time" |
+         lonely == "All or most of the time")
+
+lonelyage <- ggplot(testALL, aes(x= agebinswide, y=prop, colour = lonely, group = lonely, tooltip = percent(prop, 0.01), data_id = percent(prop, 0.01))) +
+    geom_line(size = 1) +  
+    geom_point_interactive(size = 2.5) +
+    scale_y_continuous(labels = scales::percent_format()) +
+    theme_minimal() +
+    theme(legend.position = "bottom") +
+    scale_color_manual(values=c("#E1AF00", "#F21A00")) +
+    labs(x = "Age groups", y = "% of population", colour = "Frequency of loneliness in past week")
+
+lonelyagetitle <- ggdraw() + draw_label("Figure 1. Age and loneliness in Scotland (2018)." ,
+                                        fontface = 'bold', size = 13, x = 0, hjust = 0) +
+                             theme(plot.margin = margin(0, 0, 0, 7))
+
+girafe(ggobj = plot_grid(lonelyagetitle, lonelyage, ncol = 1, rel_heights = c(0.1, 1)),
+       width_svg = 9, height_svg = 5, options = list(opts_sizing(rescale = TRUE, width = .85)))
+
+```
+
+### 4. Prevalence of loneliness by age groups
+
+This section provides a visual representation of the relationship between loneliness and each variable grouped by age in the form of stacked percentage bar graphs. 
+
+Here, because all data is weighted, sub-sample sizes of age groups denoted by n are not the actual number of respondents but its weighted equivalent. 
+
+These bar graphs should be interpreted alongside tables in section five. While in many cases the effect might be significant, what is not represented is the distribution of cases. For example, younger people with disabilities tend to experience more loneliness than older people, but there are comparatively fewer young disabled people than older disabled people. The gamma statistic take this into account.
+
+#### 4.1 Key demographics {.tabset}
+
+##### ---
+
+##### Marital status
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+html_4bargraphs(~ lonely + partner, title = "Bar graph 1. Loneliness by marital status in age groups (weighted).",
+                                      vartitle = "Legal marital status. *includes civil partnerships")
+```
+
+##### Religion
+
+```{r echo=FALSE}
+html_4bargraphs(~ lonely + religion, title = "Bar graph 2. Loneliness by religion in age groups (weighted).",
+                                      vartitle = "", xangle = 45, xjust = 1)
+```
+
+##### Gender
+
+```{r echo=FALSE}
+html_4bargraphs(~ lonely + genderr, title = "Bar graph 3. Loneliness by gender in age groups (weighted).",
+                                    vartitle = "How would you describe your gender identity? *Other categories dropped due to low counts")
+```
+
+##### Ethnicity
+
+```{r echo=FALSE}
+html_4bargraphs(~ lonely + ethnicity, title = "Bar graph 4. Loneliness by ethnicity in age groups (weighted).",
+                                      vartitle = "*Other categories dropped due to low counts")
+```
+
+##### Disability
+
+```{r echo=FALSE}
+html_4bargraphs(~ lonely + disability, title = "Bar graph 5. Loneliness by disability in age groups (weighted).",
+                                      vartitle = '"Do you have a limiting long-term physical or mental health condition?" (derived)')
+```
+
+##### Education
+
+```{r echo=FALSE}
+html_4bargraphs(~ lonely + qualifications, title = "Bar graph 6. Loneliness by disability in age groups (weighted).",
+                                      vartitle = "Highest educational qualification. *SVQ or equivalent", xangle = 45, xjust = 1)
+```
+
+#### 4.2. Individual characteristics {.tabset}
+
+##### ---
+
+##### Subjective health
+
+```{r echo=FALSE}
+html_4bargraphs(~ lonely + health, title = "Bar graph 7. Loneliness by subjective health in age groups (weighted).",
+                                      vartitle = '"How is your health in general? Would you say it was..."')
+```
+
+##### Sociability
+
+```{r echo=FALSE}
+html_4bargraphs(~ lonely + isolated, title = "Bar graph 8. Loneliness by sociability in age groups (weighted).",
+                                      vartitle = '"How often, if at all, do you meet socially with friends, relatives, neighbours or work colleagues?"', xangle = 45, xjust = 1)
+```
+
+##### Outdoor activities
+
+```{r echo=FALSE}
+html_4bargraphs(~ lonely + outdoor, title = "Bar graph 9. Loneliness by outdoor activities in age groups (weighted).",
+                                      vartitle = '"How often, on average, have you taken visits to the outdoors for leisure and recreation in Scotland in the last 12 months?"', xangle = 45, xjust = 1)
+```
+
+#### 4.3. Household and geographical factors {.tabset}
+
+##### ---
+
+##### SIMD
+
+```{r echo=FALSE}
+html_4bargraphs(~ lonely + simd, title = "Bar graph 10. Loneliness by SIMD in age groups (weighted).",
+                                      vartitle = "Scottish Index of Multiple Deprivation (SIMD) Quantiles.")
+```
+
+##### Urban/rural
+
+```{r echo=FALSE}
+html_4bargraphs(~ lonely + urbanrural, title = "Bar graph 11. Loneliness by urban/rural in age groups (weighted).",
+                                      vartitle = "2-fold Scottish Government Urban Rural Classification 2016.")
+```
+
+##### Household size
+
+```{r echo=FALSE, warning=FALSE}
+html_4bargraphs(~ lonely + householdsize, title = "Bar graph 12. Loneliness by household size in age groups (weighted).",
+                                      vartitle = "*including infants")
+```
+
+##### Household income
+
+```{r echo=FALSE}
+html_4bargraphs(~ lonely + householdincome, title = "Bar graph 13. Loneliness by household income in age groups (weighted).", vartitle = "", xangle = 45, xjust = 1)
+```
+
+#### 4.4. Social capital - neighbourhood perceptions {.tabset}
+
+"To what extent do you agree or disagree with each of the following statements about your neighbourhood?"  
+
+##### ---
+
+##### Statement 1 (S1)
+
+```{r echo=FALSE}
+html_4bargraphs(~ lonely + social3_01, title = "Bar graph 14. Loneliness by S1 in age groups (weighted).",
+                                      vartitle = '"This is a neighbourhood where people are kind to each other."',
+                xangle = 45, xjust = 1)
+```
+
+##### Statement 2 (S2)
+
+```{r echo=FALSE}
+html_4bargraphs(~ lonely + social3_02, title = "Bar graph 15. Loneliness by S2 in age groups (weighted).",
+                                      vartitle = '"This is a neighbourhood where most people can be trusted."',
+                xangle = 45, xjust = 1)
+```
+
+##### Statement 3 (S3)
+
+```{r echo=FALSE}
+html_4bargraphs(~ lonely + social3_03, title = "Bar graph 16. Loneliness by S3 in age groups (weighted).",
+                                      vartitle = '"There are welcoming places and opportunities to meet new people."',
+                xangle = 45, xjust = 1)
+```
+
+##### Statement 4 (S4)
+
+```{r echo=FALSE}
+html_4bargraphs(~ lonely + social3_04, title = "Bar graph 17. Loneliness by S4 in age groups (weighted).",
+                                      vartitle = '"There are places where people can meet up and socialise."',
+                xangle = 45, xjust = 1)
+```
+
+##### Statement 5 (S5)
+
+```{r echo=FALSE}
+html_4bargraphs(~ lonely + social3_05, title = "Bar graph 18. Loneliness by S5 in age groups (weighted).",
+                                      vartitle = '"This is a neighbourhood where people from different backgrounds get on well together."', xangle = 45, xjust = 1)
+```
+
+##### Statement 6 (S6)
+
+```{r echo=FALSE}
+html_4bargraphs(~ lonely + social3_06, title = "Bar graph 19. Loneliness by S6 in age groups (weighted).",
+                                      vartitle = '"This is a neighbourhood where local people take action to help improve the neighbourhood."', xangle = 45, xjust = 1)
+```
+
+### 5. Analysis and results
+
+#### 5.1 Prevalence of loneliness for sociodemographic factors with gamma correlations {.tabset}
+
+##### ---
+
+##### Table 1.1
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+
+t11 <- indweightsALL %>%
+  tbl_svysummary(by = lonely, percent = "row",
+                 missing = "no",
+                 include = c(lonely, partner, religion, genderr, ethnicity, disability, qualifications, health, isolated, outdoor, simd, urbanrural,                                       householdsize, householdincome),
+                 label = list(partner ~ "Marital status",
+                              religion ~ "Religion",
+                              genderr ~ "Gender",
+                              ethnicity ~ "Ethnicity",
+                              disability ~ "Disability",
+                              qualifications ~ "Education",
+                              health ~ "Subjective health", 
+                              isolated ~ "Sociability", 
+                              outdoor ~ "Outdoor activities", 
+                              simd ~ "SIMD Quantiles", 
+                              urbanrural ~ "Urban/rural", 
+                              householdsize ~ "Household size", 
+                              householdincome ~ "Household income"
+                              )) %>%
+                 add_overall() %>%
+                 modify_spanning_header(c("stat_1", "stat_2", "stat_3") ~ "**Frequency of loneliness in past week**") 
+
+tchiall <- sapply(list(~ lonely + partner,
+                       0, 0, 0, 0, 0,
+                       ~ lonely + religion,
+                       0, 0, 0, 0, 0), 
+               chis, design = indweightsALL)
+
+t11a <- sapply(list(~ lonely + genderr,
+                    0, 0,
+                    ~ lonely + ethnicity,
+                    0, 0,
+                    ~ lonely + disability,
+                    0, 0,
+                    ~ lonely + qualifications,
+                    0, 0, 0, 0, 0,
+                    ~ lonely + health,
+                    0, 0, 0, 0, 0,
+                    ~ lonely + isolated,
+                    0, 0, 0, 0, 0, 0, 0, 0,
+                    ~ lonely + outdoor,
+                    0, 0, 0, 0, 0, 0, 0, 0,
+                    ~ lonely + simd,
+                    0, 0, 0, 0, 0,
+                    ~ lonely + urbanrural,
+                    0, 0,
+                    ~ lonely + householdsize,
+                    0, 0, 0, 0,
+                    ~ lonely + householdincome,
+                    0, 0, 0, 0, 0, 0, 0, 0), 
+               gamma, design = indweightsALL)
+
+tchiallt11a <- c(tchiall, t11a)
+
+t11$table_body <- cbind(t11$table_body, tchiallt11a)
+
+t11 <- cols_label(as_gt(t11), tchiallt11a = md("**Gamma**")) %>%
+       tab_footnote(footnote = "Statistics presented: Goodman-Kruskal gamma correlation with associated p value (*** p < 0.001, ** p < 0.01, * p < 0.05)", locations = cells_column_labels(columns = vars(tchiallt11a))) %>%
+  
+  tab_source_note(source_note = md("Source: Scottish Household Survey 2018."))
+
+t11
+```
+
+<br>
+
+##### Table 1.2
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+t13 <- indweightsALL %>%
+  tbl_svysummary(by = lonely, percent = "row",
+                 missing = "no",
+                 include = c(lonely, social3_01, social3_02, social3_03, social3_04, social3_05, social3_06),
+                 label = list(social3_01 ~ "S1", 
+                              social3_02 ~ "S2", 
+                              social3_03 ~ "S3", 
+                              social3_04 ~ "S4", 
+                              social3_05 ~ "S5", 
+                              social3_06 ~ "S6"
+                              )) %>%
+                 add_overall() %>%
+                 modify_spanning_header(c("stat_1", "stat_2", "stat_3") ~ "**Frequency of loneliness in past week**") 
+
+t13a <- sapply(list(~ lonely + social3_01,
+                    0, 0, 0, 0, 0,
+                    ~ lonely + social3_02,
+                    0, 0, 0, 0, 0,
+                    ~ lonely + social3_03,
+                    0, 0, 0, 0, 0,
+                    ~ lonely + social3_04,
+                    0, 0, 0, 0, 0,
+                    ~ lonely + social3_05,
+                    0, 0, 0, 0, 0,
+                    ~ lonely + social3_06,
+                    0, 0, 0, 0, 0), 
+               gamma, design = indweightsALL)
+
+t13$table_body <- cbind(t13$table_body, t13a)
+
+t13 <- cols_label(as_gt(t13), t13a = md("**Gamma**")) %>%
+       tab_footnote(footnote = "Statistics presented: Goodman-Kruskal gamma correlation with associated p value (*** p < 0.001, ** p < 0.01, * p < 0.05)", locations = cells_column_labels(columns = vars(t13a))) %>%
+  
+   tab_footnote(footnote = '"This is a neighbourhood where people are kind to each other."', locations = cells_body(columns = vars(label), rows = label == "S1")) %>%
+  
+  tab_footnote(footnote = '"This is a neighbourhood where most people can be trusted."', locations = cells_body(columns = vars(label), rows = label == "S2")) %>%
+  
+  tab_footnote(footnote = '"There are welcoming places and opportunities to meet new people."', locations = cells_body(columns = vars(label), rows = label == "S3")) %>%
+  
+  tab_footnote(footnote = '"There are places where people can meet up and socialise."', locations = cells_body(columns = vars(label), rows = label == "S4")) %>%
+  
+  tab_footnote(footnote = '"This is a neighbourhood where people from different backgrounds get on well together."', locations = cells_body(columns = vars(label), rows = label == "S5")) %>%
+  
+  tab_footnote(footnote = '"This is a neighbourhood where local people take action to help improve the neighbourhood."', locations = cells_body(columns = vars(label), rows = label == "S6")) %>%
+
+tab_source_note(source_note = md("Source: Scottish Household Survey 2018."))
+
+t13
+```
+<br>
+
+##### Table 1.3
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+
+t531vars <- c("Gender", "Ethnicity", "Disability", "Education", "Subjective health", "Sociability", "Outdoor activities", "SIMD Quantiles", "Urban/rural", "Household size", "Household income", "S1", "S2", "S3", "S4", "S5", "S6")
+
+t531all <- sapply(list(~ lonely + genderr,
+                       ~ lonely + ethnicity,
+                       ~ lonely + disability,
+                       ~ lonely + qualifications,
+                       ~ lonely + health,
+                       ~ lonely + isolated,
+                       ~ lonely + outdoor,
+                       ~ lonely + simd,
+                       ~ lonely + urbanrural,
+                       ~ lonely + householdsize,
+                       ~ lonely + householdincome,
+                       ~ lonely + social3_01,
+                       ~ lonely + social3_02,
+                       ~ lonely + social3_03,
+                       ~ lonely + social3_04,
+                       ~ lonely + social3_05,
+                       ~ lonely + social3_06
+                    ), 
+               gamma, design = indweightsALL)
+
+t53116to29 <- sapply(list(~ lonely + genderr,
+                       ~ lonely + ethnicity,
+                       ~ lonely + disability,
+                       ~ lonely + qualifications,
+                       ~ lonely + health,
+                       ~ lonely + isolated,
+                       ~ lonely + outdoor,
+                       ~ lonely + simd,
+                       ~ lonely + urbanrural,
+                       ~ lonely + householdsize,
+                       ~ lonely + householdincome,
+                       ~ lonely + social3_01,
+                       ~ lonely + social3_02,
+                       ~ lonely + social3_03,
+                       ~ lonely + social3_04,
+                       ~ lonely + social3_05,
+                       ~ lonely + social3_06
+                    ), 
+               gamma, design = indweights16to29)
+
+t53130to59 <- sapply(list(~ lonely + genderr,
+                       ~ lonely + ethnicity,
+                       ~ lonely + disability,
+                       ~ lonely + qualifications,
+                       ~ lonely + health,
+                       ~ lonely + isolated,
+                       ~ lonely + outdoor,
+                       ~ lonely + simd,
+                       ~ lonely + urbanrural,
+                       ~ lonely + householdsize,
+                       ~ lonely + householdincome,
+                       ~ lonely + social3_01,
+                       ~ lonely + social3_02,
+                       ~ lonely + social3_03,
+                       ~ lonely + social3_04,
+                       ~ lonely + social3_05,
+                       ~ lonely + social3_06
+                    ), 
+               gamma, design = indweights30to59)
+
+t53160plus <- sapply(list(~ lonely + genderr,
+                       ~ lonely + ethnicity,
+                       ~ lonely + disability,
+                       ~ lonely + qualifications,
+                       ~ lonely + health,
+                       ~ lonely + isolated,
+                       ~ lonely + outdoor,
+                       ~ lonely + simd,
+                       ~ lonely + urbanrural,
+                       ~ lonely + householdsize,
+                       ~ lonely + householdincome,
+                       ~ lonely + social3_01,
+                       ~ lonely + social3_02,
+                       ~ lonely + social3_03,
+                       ~ lonely + social3_04,
+                       ~ lonely + social3_05,
+                       ~ lonely + social3_06
+                    ), 
+               gamma, design = indweights60plus)
+
+t531 <- cbind(t531vars, t531all, t53116to29, t53130to59, t53160plus)
+
+t531 <- gt(as.data.frame(t531))
+
+t531 <- cols_label(t531, t531vars = md("**Characteristic**"), t531all = md("**All age groups**"), t53116to29 = md("**16-29**"),
+                   t53130to59 = md("**30-59**"), t53160plus = md("**60+**")) %>%
+        tab_footnote(footnote = "Statistics presented: Goodman-Kruskal gamma correlation with associated p value (*** p < 0.001, ** p <            0.01, * p < 0.05)", locations = cells_column_labels(columns = vars(t531all, t53116to29, t53130to59, t53160plus))) %>%
+  
+        tab_footnote(footnote = '"This is a neighbourhood where people are kind to each other."', locations = cells_body(columns = vars(t531vars), rows = t531vars == "S1")) %>%
+  
+  tab_footnote(footnote = '"This is a neighbourhood where most people can be trusted."', locations = cells_body(columns = vars(t531vars), rows = t531vars == "S2")) %>%
+  
+  tab_footnote(footnote = '"There are welcoming places and opportunities to meet new people."', locations = cells_body(columns = vars(t531vars), rows = t531vars == "S3")) %>%
+  
+  tab_footnote(footnote = '"There are places where people can meet up and socialise."', locations = cells_body(columns = vars(t531vars), rows = t531vars == "S4")) %>%
+  
+  tab_footnote(footnote = '"This is a neighbourhood where people from different backgrounds get on well together."', locations = cells_body(columns = vars(t531vars), rows = t531vars == "S5")) %>%
+  
+  tab_footnote(footnote = '"This is a neighbourhood where local people take action to help improve the neighbourhood."', locations = cells_body(columns = vars(t531vars), rows = t531vars == "S6")) %>%
+
+        tab_spanner(label = md("**Frequency of loneliness in age groups**"),
+        columns = vars(t531all, t53116to29, t53130to59, t53160plus)) %>%
+
+tab_source_note(source_note = md("Source: Scottish Household Survey 2018."))
+t531
+```
+<br>
+
+### 6. Summary and policy relevance
+
+### 7. References
+
